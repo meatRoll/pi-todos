@@ -13,7 +13,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { StringEnum } from "@mariozechner/pi-ai";
 import { Text } from "@mariozechner/pi-tui";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 // ---------------------------------------------------------------------------
 // Constants — tool/command identity and static user-facing strings
@@ -280,6 +280,22 @@ export function applyTaskMutation(
 						params,
 						`illegal transition ${current.status} → ${params.status}`,
 					);
+				}
+				if (
+					params.status === "in_progress" &&
+					current.status !== "in_progress"
+				) {
+					const activeTask = state.tasks.find(
+						(t) => t.id !== current.id && t.status === "in_progress",
+					);
+					if (activeTask) {
+						return errorResult(
+							state,
+							action,
+							params,
+							`only one task can be in_progress at a time: #${activeTask.id} ${activeTask.subject} is currently in_progress`,
+						);
+					}
 				}
 				newStatus = params.status;
 			}
@@ -672,8 +688,8 @@ export function registerTodoTool(pi: ExtensionAPI): void {
 			return new Text(text, 0, 0);
 		},
 
-		renderResult(result, _opts, theme, _context) {
-			if (result.isError) {
+		renderResult(result, _opts, theme, context) {
+			if (context.isError) {
 				return new Text(theme.fg("error", "✗"), 0, 0);
 			}
 			const details = result.details as TaskDetails | undefined;

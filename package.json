@@ -34,10 +34,21 @@
       "./index.ts"
     ]
   },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "peerDependencies": {
     "@mariozechner/pi-ai": "*",
     "@mariozechner/pi-coding-agent": "*",
     "@mariozechner/pi-tui": "*",
-    "@sinclair/typebox": "*"
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typebox": "^1.4.3",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
   }
 }
