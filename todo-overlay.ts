@@ -20,7 +20,7 @@ import { getTodos, type Task, type TaskStatus } from "./todo.js";
 
 // ---- Constants ----
 
-const WIDGET_KEY = "rpiv-todos";
+const WIDGET_KEY = "pi-todos";
 /** Maximum rendered lines before overflow-collapse kicks in. Mirrors AgentWidget. */
 const MAX_WIDGET_LINES = 12;
 

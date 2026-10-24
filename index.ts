@@ -1,13 +1,13 @@
 /**
- * rpiv-todo — Pi extension
+ * pi-todos — Pi extension
  *
  * Registers the `todo` tool, `/todos` slash command, and the five lifecycle
  * hooks that manage branch-replay state reconstruction and the TodoOverlay
  * persistent widget.
  *
- * Extracted from rpiv-pi@7525a5d. Tool name "todo" and widget key
- * "rpiv-todos" preserved verbatim so existing session history replays
- * correctly after upgrade.
+ * Forked from juicesharp/rpiv-todo (originally part of rpiv-pi).
+ * Tool name "todo" and slash command "/todos" are retained for compatibility;
+ * the widget key is owned by this fork.
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";

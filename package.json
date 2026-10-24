@@ -1,23 +1,24 @@
 {
-  "name": "@juicesharp/rpiv-todo",
+  "name": "pi-todos",
   "version": "0.1.2",
-  "description": "Pi extension: Claude-Code-parity todo tool + persistent overlay widget",
+  "description": "Pi extension: persistent todo tool and overlay widget",
   "keywords": [
     "pi-package",
     "pi-extension",
-    "rpiv",
-    "todo"
+    "pi",
+    "todo",
+    "overlay"
   ],
   "type": "module",
   "license": "MIT",
-  "author": "juicesharp",
+  "author": "meatRoll",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/juicesharp/rpiv-todo.git"
+    "url": "git+https://github.com/meatRoll/pi-todos.git"
   },
-  "homepage": "https://github.com/juicesharp/rpiv-todo#readme",
+  "homepage": "https://github.com/meatRoll/pi-todos#readme",
   "bugs": {
-    "url": "https://github.com/juicesharp/rpiv-todo/issues"
+    "url": "https://github.com/meatRoll/pi-todos/issues"
   },
   "publishConfig": {
     "access": "public"
