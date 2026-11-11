@@ -1,9 +1,9 @@
 /**
  * pi-todos — Pi extension
  *
- * Registers the `todo` tool, `/todos` slash command, and the five lifecycle
- * hooks that manage branch-replay state reconstruction and the TodoOverlay
- * persistent widget.
+ * Registers the `todo` tool, `/todos` slash command, the `context` hook that
+ * re-injects task state into every provider request, and the lifecycle hooks
+ * that manage branch-replay state reconstruction and the TodoOverlay widget.
  *
  * Forked from juicesharp/rpiv-todo (originally part of rpiv-pi).
  * Tool name "todo" and slash command "/todos" are retained for compatibility;
@@ -11,7 +11,13 @@
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { TOOL_NAME, registerTodoTool, registerTodosCommand, reconstructTodoState } from "./todo.js";
+import {
+    TOOL_NAME,
+    injectTodoState,
+    registerTodoTool,
+    registerTodosCommand,
+    reconstructTodoState,
+} from "./todo.js";
 import { TodoOverlay } from "./todo-overlay.js";
 
 export default function (pi: ExtensionAPI) {
@@ -43,6 +49,16 @@ export default function (pi: ExtensionAPI) {
     pi.on("session_shutdown", async () => {
         todoOverlay?.dispose();
         todoOverlay = undefined;
+    });
+
+    // Keeps the task list inside the model's context. Without this the list only
+    // exists in the TUI overlay, so the model silently drifts out of sync across
+    // turns. Runs before every provider request and appends to the last message
+    // rather than adding one, so prefix caching survives (see todo.ts).
+    pi.on("context", async (event) => {
+        const messages = injectTodoState(event.messages) as typeof event.messages | undefined;
+        if (!messages) return;
+        return { messages: [...messages] };
     });
 
     // Reads getTodos() at render time; do NOT call reconstructTodoState here

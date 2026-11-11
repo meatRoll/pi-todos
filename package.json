@@ -1,6 +1,6 @@
 {
   "name": "pi-todos",
-  "version": "0.1.2",
+  "version": "1.0.0",
   "description": "Pi extension: persistent todo tool and overlay widget",
   "keywords": [
     "pi-package",
@@ -27,7 +27,8 @@
     "index.ts",
     "todo.ts",
     "todo-overlay.ts",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "pi": {
     "extensions": [

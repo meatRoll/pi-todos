@@ -1,0 +1,82 @@
+name: Release
+
+# A pushed version tag is the only trigger: releases are never cut from a branch.
+#   npm version 1.0.0 --no-git-tag-version   # or edit package.json + CHANGELOG.md
+#   git commit -am "release: v1.0.0"
+#   git tag -a v1.0.0 -m "v1.0.0" && git push --follow-tags
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The notes script and the tag/version check read the checked-out history.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+
+      # Never publish a tag that does not pass its own checks.
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Check the tag matches package.json
+        run: |
+          pkg="v$(node -p "require('./package.json').version")"
+          if [ "$pkg" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $pkg" >&2
+            exit 1
+          fi
+
+      # Title and body come from the `## vX.Y.Z` section of CHANGELOG.md, so the
+      # release cannot drift from the changelog.
+      - name: Build release notes from CHANGELOG.md
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+
+      - name: Pack the installable tarball
+        run: |
+          npm pack --silent > /dev/null
+          ls -l ./*.tgz
+
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file "$RUNNER_TEMP/notes.md"
+            gh release upload "$GITHUB_REF_NAME" ./*.tgz --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" ./*.tgz \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file "$RUNNER_TEMP/notes.md" \
+              --verify-tag
+          fi
+
+      # Optional: skipped until an NPM_TOKEN repository secret exists.
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
+          npm publish --provenance --access public

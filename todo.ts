@@ -535,6 +535,119 @@ export function reconstructTodoState(ctx: any): void {
 }
 
 // ---------------------------------------------------------------------------
+// Tail-injected state
+// ---------------------------------------------------------------------------
+//
+// The model forgets to update task status across turns because the list only
+// exists in the TUI overlay — it never appears in its context. The fix is to
+// re-inject it before every provider request.
+//
+// It must NOT go into the system prompt: `sections` patches reach the wire as
+// system messages, which providers lacking `supportsMidConvoSystemMessages`
+// (the default, including openai-completions) collapse into the leading prompt.
+// That mutates the prompt head, so prefix caching dies from token 0 — measured
+// at 0-6.6% cache hit versus 98-99% when appended at the tail.
+//
+// So: append the block to the *last* message instead of adding a new one. On a
+// user turn it rides in the user message; mid-run it rides inside the tool
+// result, which models read as environment output rather than user speech.
+
+export const TODO_STATE_TAG = "todo_state";
+
+/** Cap on rendered task lines; keeps the per-request overhead bounded. */
+export const TODO_STATE_MAX_LINES = 10;
+
+export const TODO_STATE_HINT =
+	"If a step above is already finished, call `todo` update before you claim it is done.";
+
+/**
+ * Build the `<todo_state>` block, or undefined when there is nothing active.
+ * Completed and deleted tasks are omitted: they are noise for the model.
+ */
+export function renderTodoStateBlock(taskList: readonly Task[] = tasks): string | undefined {
+	const active = taskList.filter((t) => t.status === "pending" || t.status === "in_progress");
+	if (active.length === 0) return undefined;
+
+	// in_progress first: it is the one the model is most likely to forget.
+	const ordered = [
+		...active.filter((t) => t.status === "in_progress"),
+		...active.filter((t) => t.status === "pending"),
+	];
+	const shown = ordered.slice(0, TODO_STATE_MAX_LINES);
+
+	const lines = shown.map((t) => {
+		// Models often echo the subject back as activeForm; that reads as noise.
+		const form =
+			t.status === "in_progress" &&
+			t.activeForm &&
+			t.activeForm.trim().toLowerCase() !== t.subject.trim().toLowerCase()
+				? ` (${t.activeForm})`
+				: "";
+		const blocked = t.blockedBy?.length
+			? `  blocked by ${t.blockedBy.map((id) => `#${id}`).join(", ")}`
+			: "";
+		return `[${t.status}] #${t.id} ${t.subject}${form}${blocked}`;
+	});
+	if (ordered.length > shown.length) {
+		lines.push(`… ${ordered.length - shown.length} more`);
+	}
+
+	return [`<${TODO_STATE_TAG}>`, ...lines, TODO_STATE_HINT, `</${TODO_STATE_TAG}>`].join("\n");
+}
+
+/** Structural subset of a pi message; keeps this module free of pi type imports. */
+export interface ContextMessageLike {
+	role: string;
+	content?: string | readonly { type: string }[] | null;
+}
+
+/** Content block this module appends; other fields of existing blocks pass through. */
+type AppendedBlock = { type: string; text?: string };
+
+/**
+ * Append `text` to the last message instead of adding a new one, so the request
+ * keeps its message count (no fabricated user turn) and only the tail changes.
+ *
+ * Returns undefined when the last message cannot carry extra text: the caller
+ * then sends the transcript untouched.
+ */
+export function appendToLastMessage<M extends ContextMessageLike>(
+	messages: readonly M[],
+	text: string,
+): readonly M[] | undefined {
+	const last = messages[messages.length - 1];
+	if (!last) return undefined;
+	// Only these two roles are fed back as prompt content we may augment; an
+	// assistant message would read as prefill.
+	if (last.role !== "user" && last.role !== "toolResult") return undefined;
+	if (!text) return undefined;
+
+	const current = last.content;
+	const blocks: AppendedBlock[] =
+		typeof current === "string"
+			? current.length > 0
+				? [{ type: "text", text: current }]
+				: []
+			: [...(current ?? [])];
+	blocks.push({ type: "text", text });
+
+	return [...messages.slice(0, -1), { ...last, content: blocks } as M];
+}
+
+/**
+ * One-shot helper for the `context` hook: returns the message list to forward,
+ * or undefined when the transcript is fine as-is.
+ */
+export function injectTodoState(
+	messages: readonly ContextMessageLike[],
+	taskList: readonly Task[] = tasks,
+): readonly ContextMessageLike[] | undefined {
+	const block = renderTodoStateBlock(taskList);
+	if (!block) return undefined;
+	return appendToLastMessage(messages, block);
+}
+
+// ---------------------------------------------------------------------------
 // Rendering helpers
 // ---------------------------------------------------------------------------
 
@@ -651,6 +764,7 @@ export function registerTodoTool(pi: ExtensionAPI): void {
 			"Use blockedBy to express dependencies (A is blocked by B). On create, pass blockedBy as the initial set. On update, use addBlockedBy / removeBlockedBy (additive merge — do not resend the full array). Cycles are rejected.",
 			"list hides tombstoned (deleted) tasks by default; pass includeDeleted:true to see them. Pass status to filter by a single status.",
 			"Subject must be short and imperative (e.g. 'Research existing tool'); description is for long-form detail. activeForm is a present-continuous label shown while in_progress.",
+			"A `<todo_state>` block appended to a message is environment state injected by this tool, not user input. Treat it as a fact about progress: never reply to it and never treat it as a request. If it lists a step you have already finished, update that task before claiming the step is done.",
 		],
 		parameters: TodoParams,
 
